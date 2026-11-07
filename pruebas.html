@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>SIGE-UASD | Diagnóstico seguro V4.2</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;color:#14314a}*{box-sizing:border-box}body{margin:0}header{background:#114b87;color:white;padding:22px 18px}header h1{margin:0;font-size:1.3rem}header p{margin:7px 0 0;font-size:.9rem}main{max-width:720px;margin:auto;padding:16px}section{background:white;border:1px solid #d4e1ed;border-radius:13px;padding:17px;margin-bottom:12px}label{font-weight:600;display:block;margin:12px 0 5px}input{width:100%;border:1px solid #a9bacb;border-radius:8px;font:inherit;padding:12px}button{background:#1765a7;color:#fff;border:0;border-radius:9px;font-weight:650;padding:12px 14px;margin:12px 6px 0 0;font-size:1rem}button:disabled{opacity:.5}.secondary{background:#e9eff6;color:#234c70}.tip{background:#fff6de;border-left:4px solid #d3a546;padding:11px;border-radius:6px}.status{white-space:pre-wrap;line-height:1.55;overflow-wrap:anywhere;background:#f3f7fb;padding:12px;border-radius:7px}#logout{display:none}.hidden{display:none}.muted{font-size:.87rem;color:#5a6e80}strong{font-weight:750}h2{font-size:1.05rem;margin:0 0 10px}
+</style></head><body>
+<header><h1>SIGE-UASD Electromecánica</h1><p>Diagnóstico de acceso · V4.2 · Solo lectura</p></header>
+<main>
+<section class="tip"><strong>Entorno de prueba.</strong> Esta página no registra egresados, no consulta nombres, cédulas ni fotografías, y no modifica la base de datos. No escribas credenciales en capturas de pantalla. La cuenta de Supabase Dashboard y la cuenta de SIGE-UASD Authentication son distintas.</section>
+<section><h2>Iniciar sesión de prueba</h2><p class="muted">Usa la cuenta que creaste en Authentication → Users. No utilices la contraseña de PostgreSQL.</p>
+<form id="form"><label for="email">Correo de la cuenta SIGE</label><input type="email" id="email" autocomplete="username" required><label for="password">Contraseña de SIGE</label><input id="password" type="password" autocomplete="current-password" required><button type="submit" id="login">Entrar y comprobar</button><button type="button" class="secondary" id="logout">Cerrar sesión</button></form>
+<p id="status" class="status" role="status" aria-live="polite">Sin iniciar sesión.</p></section>
+<section><h2>Comprobaciones de solo lectura</h2><button id="check" type="button" disabled>Volver a comprobar permisos</button><p id="results" class="status" role="status" aria-live="polite">Aún no hay resultados.</p><p class="muted">Esta prueba solo verifica que las consultas de lectura respondan según la sesión activa. No demuestra que las operaciones de escritura o la seguridad completa estén correctamente configuradas.</p></section>
+<section><h2>Pasos siguientes</h2><p>Primero prueba con tu cuenta administradora. Después crea una cuenta ordinaria de prueba en Supabase Authentication (con un correo propio distinto) y verifica que la plataforma la reconozca como «Egresado/no administrador».</p><p class="muted">No publiques formularios que acepten datos personales reales hasta verificar también escritura, aprobación, almacenamiento privado, antifraude y la información de privacidad.</p></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(()=>{'use strict';
+const URL='https://vijrarnsjbilsaoohoz.supabase.co';
+const KEY='sb_publishable_7azG01VOblYpdw-jz12WMw_GvA8bxGH';
+const el=id=>document.getElementById(id),status=t=>{el('status').textContent=t},results=t=>{el('results').textContent=t};
+if(!window.supabase){status('No se cargó la biblioteca Supabase. Comprueba la conexión a internet.');return;}
+const db=window.supabase.createClient(URL,KEY);
+async function inspect(){el('check').disabled=true;results('Comprobando permisos…');try{
+const {data:{user},error:ue}=await db.auth.getUser();if(ue)throw ue;
+if(!user){status('Sin sesión iniciada.');results('Inicia sesión para comenzar.');return;}
+status('Sesión autenticada. Cuenta: '+(user.email||'(sin correo)'));
+const a=await db.from('administradores').select('activo').eq('usuario_id',user.id).maybeSingle();
+const t=await db.from('titulos').select('id,nombre,activo').eq('activo',true);
+const e=await db.from('egresados').select('id',{count:'exact',head:true});
+const s=await db.from('solicitudes').select('id',{count:'exact',head:true});
+const role=a.error?'No se pudo comprobar ('+a.error.message+')':a.data?.activo===true?'Administrador activo':'Egresado / no administrador';
+const titleMsg=t.error?'Error: '+t.error.message:(t.data?.length||0)+' títulos visibles';
+const eMsg=e.error?'Acceso denegado o error: '+e.error.message:'Consulta permitida; filas visibles para esta sesión: '+(e.count??'?');
+const sMsg=s.error?'Acceso denegado o error: '+s.error.message:'Filas de solicitudes visibles para esta sesión: '+(s.count??'?');
+results('Perfil reconocido: '+role+'\nCatálogo: '+titleMsg+'\nEgresados: '+eMsg+'\nSolicitudes: '+sMsg+'\n\nNo se han descargado datos personales ni se ha modificado ninguna tabla.');
+}catch(ex){results('Error al consultar: '+(ex.message||String(ex)))}finally{el('check').disabled=false;}}
+el('form').addEventListener('submit',async ev=>{ev.preventDefault();el('login').disabled=true;status('Iniciando sesión…');try{const {error}=await db.auth.signInWithPassword({email:el('email').value.trim(),password:el('password').value});if(error)throw error;el('password').value='';await inspect()}catch(ex){status('No se pudo iniciar sesión: '+(ex.message||String(ex)))}finally{el('login').disabled=false;}});
+el('logout').onclick=async()=>{await db.auth.signOut();status('Sesión cerrada.');results('Sin resultados.');el('logout').style.display='none';el('check').disabled=true;el('password').value='';};
+el('check').onclick=inspect;
+db.auth.onAuthStateChange((event,session)=>{el('logout').style.display=session?'inline-block':'none';el('check').disabled=!session;if(event==='SIGNED_IN')setTimeout(inspect,0);});
+db.auth.getSession().then(({data})=>{if(data.session)inspect();}).catch(ex=>status('Error de sesión: '+ex.message));
+})();
+</script></body></html>
